@@ -1,0 +1,298 @@
+---
+title: "Youtube New"
+author: "Lanzo Siega"
+date: "03/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Packages Used
+```{r}
+install.packages(c("jsonlite","plyr", "dplyr", "ggplot2", "scales"))
+library(jsonlite)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(scales)
+```
+
+Setting Working Directory
+```{r}
+getwd()
+setwd("D:/Practice/Portfolio/youtube-new")
+```
+
+Reading CAVideos.csv and CA_category_id.json files, then checking structure of both datasets
+```{r}
+ca <- read.csv("CAvideos.csv", stringsAsFactors = F)
+
+caID <- fromJSON("CA_category_id.json", flatten = T)
+items <- caID[["items"]]
+attach(c(ca, items))
+```
+
+# Descriptive Analysis
+
+```{r}
+summary(ca)
+str(ca)
+dim(ca)
+View(ca)
+```
+
+```{r}
+summary(items)
+str(items)
+dim(items)
+View(items)
+```
+
+#Exploratory Data Analysis
+
+correlation_matrix
+```{r}
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor) 
+{
+    usr <- par("usr"); on.exit(par(usr)) 
+    par(usr = c(0, 1, 0, 1)) 
+    r <- abs(cor(x, y)) 
+    txt <- format(c(r, 0.123456789), digits=digits)[1] 
+    txt <- paste(prefix, txt, sep="") 
+    if(missing(cex.cor)) cex <- 0.8/strwidth(txt) 
+ 
+    test <- cor.test(x,y) 
+    # borrowed from printCoefmat
+    Signif <- symnum(test$p.value, corr = FALSE, na = FALSE, 
+                  cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+                  symbols = c("***", "**", "*", ".", " ")) 
+ 
+    text(0.5, 0.5, txt, cex = cex * r) 
+    text(.8, .8, Signif, cex=cex, col=2) 
+}
+numer <- ca[c("views", "likes", "dislikes", "comment_count")]
+pairs(numer, lower.panel = panel.smooth, upper.panel = panel.cor)
+
+calm <- lm(views~likes+dislikes+comment_count)
+summary(calm)
+```
+
+Comment_count yields the highest correlation coefficient with each numerical variable.
+```{r}
+co <- head(ca$title[order(ca$comment_count, decreasing = T)], n = 10)
+co
+ca$title[ca$comment_count == max(ca$comment_count)]
+```
+
+Top Video by comment count
+```{r}
+co <- aggregate(comment_count~title,ca, FUN = sum)
+top_co <- head(co[order(co$comment_count, decreasing = T),], n = 10)
+View(top_co)
+```
+
+```{r}
+rew <- ca[ca$title == "YouTube Rewind: The Shape of 2017 | #YouTubeRewind",]
+sum(rew$likes) / sum(rew$likes, rew$dislikes)
+sum(rew$likes) / sum(rew$views) * 100
+```
+
+Top Channel by Comment_Count
+```{r}
+com_count <- aggregate(comment_count~channel_title, ca, FUN = sum)
+top_con <- head(com_count[order(com_count$comment_count, decreasing = T),], n = 10)
+View(top_con)
+
+connie <- ggplot(top_con, aes(channel_title, comment_count, fill = channel_title)) + 
+  geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 50, hjust = 1)) +
+  scale_y_continuous(labels = comma)
+
+ggsave("chan_con.png", plot = connie, device = "png", path = "D:/Practice/Portfolio/youtube-new/Graphs", scale = 1, width = 10, height = 7)
+```
+
+Most trending date
+```{r}
+td <- aggregate(comment_count~trending_date, FUN = sum)
+top_td <- head(td[order(td$comment_count, decreasing = T), ], n = 10)
+
+top_date <- ca$title[ca$trending_date == "18.20.05"] 
+View(top_date)
+ca$comment_count[ca$trending_date == "18.20.05"]
+
+yan <- ca[grep("Yanny",ca$title), ]
+
+sum(yan$comment_count[yan$trending_date == "18.20.05"]) / sum(comment_count[trending_date == "18.20.05"])
+
+vidcom <- as.data.frame(ca$title[ca$trending_date == "18.20.05"])
+vidcom$comment_count <- ca$comment_count[top_date]
+colnames(vidcom) <- c("Title", "Number of Comments")
+vidcom <- head(vidcom[order(vidcom$`Number of Comments`, decreasing = T),], n = 10)
+View(vidcom)
+ca$category_id[vidcom$Title]
+```
+
+
+```{r}
+comcat <- aggregate(comment_count~category_id, ca, FUN = sum)
+names(comcat) <- c("cid", "comment_count")
+colnames(items)[colnames(items)=="id"] <- "cid"
+
+commy <- inner_join(items, comcat, by = "cid")
+top_com <- commy[,c("snippet.title","comment_count")]
+
+sum(top_com$comment_count)
+(max(top_com$comment_count) - min(top_com$comment_count)) / 5
+
+com_plot <- ggplot(top_com, aes(x = snippet.title, y = comment_count, fill = snippet.title)) + 
+  geom_bar(stat = "identity") + labs(x = "Category", y = "Total Comments", fill ="Legend") + scale_y_continuous(labels = comma, breaks = seq(0,202939308, by = 11059811)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+com_plot
+
+ggsave("top_com.png", plot = com_plot, device = "png", path = "D:/Practice/Portfolio/youtube-new/Graphs", scale = 1, width = 10, height = 7)
+```
+
+
+
+Views
+```{r}
+summary(views)
+title[views == min(views)]
+title[views == max(views)]
+```
+
+Comments
+```{r}
+summary(ca$comment_count)
+ca$title[ca$comment_count == max(ca$comment_count)]
+
+detach(c(ca, items))
+
+vcom <- lm(comment_count~views+likes+dislikes, data = ca)
+summary(vcom)
+
+com_dis <- glm(comments_disabled~views+likes+dislikes, data = ca, family = "binomial")
+
+summary(com_dis)
+curve(predict(com_dis, data.frame(ca = x)))
+```
+
+Likes
+```{r}
+summary(ca$likes)
+summary(ca$dislikes)
+plot(likes~dislikes, data = ca)
+plot(likes~views)
+
+```
+
+
+Top 10 Video that remained the most on the trending list
+```{r}
+ce <- count(title)
+trendy <- head(ce[order(ce$freq, decreasing = T),], n = 10)
+names(trendy) <- c("Video Title", "Trending Frequency")
+
+View(trendy)
+```
+
+
+Top 10 Channels by most views
+```{r}
+t <- aggregate(views~channel_title,ca, FUN = sum)
+top_chan <- head(t[order(t$views, decreasing = T),], n =10)
+
+View(top_chan)
+
+top_vi <- ggplot(data = top_chan, aes(x = channel_title, y = views, fill = channel_title)) + 
+  geom_bar(stat = "identity") + labs(x = "Channel", y = "Total Views", fill = "Legend") +
+  theme(axis.text.x = element_text(angle = 50, hjust = 1)) +
+  scale_y_continuous(labels = comma)
+
+ggsave("v_chan.png", plot = top_vi, device = "png", path = "D:/Practice/Portfolio/youtube-new/Graphs", scale = 1, width = 10, height = 7)
+```
+
+
+
+Number of videos per category
+```{r}
+category <- aggregate(video_id~category_id, ca, FUN = length)
+names(category) <- c("cid", "total_videos")
+category$cid <- as.character(category$cid)
+#colnames(items)[colnames(items)=="id"] <- "cid"
+
+catty <- inner_join(items, category, by = "cid")
+top_cat <- catty[,c("snippet.title","total_videos")]
+
+vcat <- ggplot(top_cat, aes(x = snippet.title, y = total_videos, fill = snippet.title)) + 
+  geom_bar(stat = "identity") + labs(x = "Categories", y = "Total Videos", fill ="Legend") + 
+  scale_y_continuous(labels = comma, breaks = seq(0,13451, by = 2689)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("top_vcat.png", plot = vcat, device = "png", path = "D:/Practice/Portfolio/youtube-new/Graphs", scale = 1, width = 10, height = 7)
+```
+
+
+# Natural Language Processing
+
+```{r}
+install.packages(c("tm", "SnowballC", "wordcloud", "e1071", "gmodels"))
+install.packages("stringr")
+library(stringr)
+library(tm)
+library(SnowballC)
+library(wordcloud)
+```
+
+## tm package
+Creating a Corpus (AKA a collection of documents) for the collection of tags
+```{r}
+tag_corpus <- VCorpus(VectorSource(ca$tags))
+inspect(tag_corpus[1:2])
+lapply(tag_corpus[1:4],as.character) #viewing multiple tags
+```
+
+Cleaning the text
+```{r}
+tag_corpus_clean <- tm_map(tag_corpus, content_transformer(tolower)) #converts to lower case
+tag_corpus_clean <- tm_map(tag_corpus, removeNumbers) #remove numbers
+tag_corpus_clean <- tm_map(tag_corpus, removeWords, stopwords()) #removing stop words
+tag_corpus_clean <- tm_map(tag_corpus_clean, removePunctuation)
+```
+
+## SnowballC package
+Stemming the Tags
+```{r}
+tag_corpus_clean <- tm_map(tag_corpus_clean, stemDocument)
+tag_corpus_clean <- tm_map(tag_corpus_clean,stripWhitespace)
+```
+
+split messages into individual components
+```{r}
+tag_dtm <- DocumentTermMatrix(tag_corpus_clean)
+#View(tag_dtm)
+```
+
+```{r}
+install.packages("tokenizers")
+library(tokenizers)
+
+taggy1 <- gsub(pattern = "|", " ", ca$tags, fixed = T)
+taggy2 <- tokenize_words(taggy1, stopwords = stopwords ::stopwords("en"))
+taggy2 <- unlist(taggy2, use.names = F)
+taggy2 <- plyr::count(taggy2)
+taggy2 <- taggy2[grep("^(?i)[A-Z]+$",taggy2$x),]
+write.csv(taggy2, file = "tagsdf.csv",row.names = F)
+
+
+
+taggy3 <- head(taggy2[order(taggy2$freq, decreasing = T),], n = 100)
+View(taggy2)
+```
+
+## Wordcloud package
+Visualizing Words
+```{r}
+wordcloud(tag_corpus_clean,min.freq = 500,random.order = F)
+```
