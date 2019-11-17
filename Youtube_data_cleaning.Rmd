@@ -54,9 +54,9 @@ View(items)
 
 Correlation Matrix
 ```{r}
-library(Hmisc)
-rcorr(numer, type = "pearson")
+library(GGally)
 
+numer <- ca[c("views", "likes", "dislikes", "comment_count")]
 cor_mat <- ggcorr(numer, label = T ,digits = 3, low = "#ff0f0f", mid = "#ffffff", high = "#0206ed", midpoint = 0)
 ```
 
